@@ -6,5 +6,6 @@ import { StorageService } from './storage.service';
 @Module({
   providers: [AuthService, StorageService],
   controllers: [AuthController],
+  exports: [AuthService, StorageService],
 })
 export class AuthModule {}

@@ -1,71 +1,70 @@
 import { Injectable } from '@nestjs/common';
 import { StorageService } from './storage.service';
-import * as FormData from 'form-data';
 import axios from 'axios';
-import fetch from 'node-fetch';
 
 @Injectable()
 export class AuthService {
   constructor(private tokenService: StorageService) {}
 
-  getHeaders() {
+  async getHeaders(options?: { isForm?: boolean; ignoreTry?: boolean }) {
+    if (!options?.ignoreTry) await this.tryRefresh(); //doesn't works
+
+    const storage = this.tokenService.getStorage();
+
     return {
       'User-Agent':
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0',
       Accept: 'application/json, text/plain, */*',
       'Accept-Language': 'en-US,en;q=0.5',
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'X-From-Id': this.tokenService.getUUID(),
-      'X-App': 'web',
+      'Content-Type': options?.isForm
+        ? 'application/x-www-form-urlencoded'
+        : undefined,
+      'X-From-Id': storage.uuid,
+      'X-App': storage.redirectAppId,
       'X-Referer': '',
+      'X-Currency': 'RUB',
       'Sec-Fetch-Dest': 'empty',
       'Sec-Fetch-Mode': 'cors',
       'Sec-Fetch-Site': 'same-site',
+      Authorization: storage.accessToken
+        ? 'Bearer ' + storage.accessToken
+        : undefined,
     };
   }
 
-  async getCode(phone: string) {
-    const data = `client_id=${encodeURIComponent(phone)}`;
-    console.log(data);
+  async tryRefresh() {
+    const storage = this.tokenService.getStorage();
+
+    if (!(Date.now() + 24 * 60 * 60 * 1000 > storage.expiresAt)) {
+      return;
+    }
+
     try {
-      const authRes = await fetch(
-        'https://api.boosty.to/oauth/phone/authorize',
+      const tokenRes = await axios.post<{
+        access_token: string;
+        expires_in: number;
+        refresh_token: string;
+      }>(
+        'https://api.boosty.to/oauth/token',
         {
-          headers: this.getHeaders(),
-          body: data,
-          method: 'POST',
+          device_id: storage.uuid,
+          device_os: storage.redirectAppId,
+          grant_type: 'refresh_token',
+          refresh_token: storage.refreshToken,
+        },
+        {
+          headers: await this.getHeaders({ ignoreTry: true }),
         },
       );
-      const authData = await authRes.json();
-      return authData;
+      console.log(tokenRes);
+
+      this.tokenService.saveToken(
+        tokenRes.data.access_token,
+        tokenRes.data.refresh_token,
+        Date.now() + tokenRes.data.expires_in * 1000,
+      );
     } catch (e) {
       console.log(e);
     }
-  }
-
-  async getToken(phone: string, sms: string, code: string) {
-    const data = new FormData();
-
-    data.append('device_id', this.tokenService.getUUID());
-    data.append('device_os', 'web');
-    data.append('client_id', phone);
-    data.append('sms_code', sms);
-    data.append('code', code);
-
-    const tokenRes = await axios.post<{
-      access_token: string;
-      expires_in: number;
-      refresh_token: string;
-    }>('https://api.boosty.to/oauth/phone/token', data, {
-      headers: this.getHeaders(),
-    });
-
-    return this.tokenService.saveToken({
-      expiresAt: `${Date.now() + tokenRes.data.expires_in * 1000}`,
-      accessToken: tokenRes.data.access_token,
-      refreshToken: tokenRes.data.refresh_token,
-      isEmptyUser: 0,
-      redirectAppId: this.tokenService.getUUID(),
-    });
   }
 }
