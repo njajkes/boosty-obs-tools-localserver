@@ -7,7 +7,7 @@ export class AuthService {
   constructor(private tokenService: StorageService) {}
 
   async getHeaders(options?: { isForm?: boolean; ignoreTry?: boolean }) {
-    if (!options?.ignoreTry) await this.tryRefresh(); //doesn't works
+    if (!options?.ignoreTry) await this.tryRefresh();
 
     const storage = this.tokenService.getStorage();
 
@@ -40,23 +40,21 @@ export class AuthService {
     }
 
     try {
+      const body = `device_id=${storage.uuid}&device_os=web&grant_type=refresh_token&refresh_token=${storage.refreshToken}`;
+      const cookie = encodeURIComponent(
+        `_clientId=${storage.uuid}; auth={"accessToken":"","refreshToken":"${storage.refreshToken}","expiresAt":0}`,
+      );
       const tokenRes = await axios.post<{
         access_token: string;
         expires_in: number;
         refresh_token: string;
-      }>(
-        'https://api.boosty.to/oauth/token',
-        {
-          device_id: storage.uuid,
-          device_os: storage.redirectAppId,
-          grant_type: 'refresh_token',
-          refresh_token: storage.refreshToken,
+      }>('https://api.boosty.to/oauth/token/', body, {
+        headers: {
+          ...(await this.getHeaders({ ignoreTry: true, isForm: true })),
+          Authorization: 'Bearer',
+          Cookie: cookie,
         },
-        {
-          headers: await this.getHeaders({ ignoreTry: true }),
-        },
-      );
-      console.log(tokenRes);
+      });
 
       this.tokenService.saveToken(
         tokenRes.data.access_token,
@@ -64,7 +62,7 @@ export class AuthService {
         Date.now() + tokenRes.data.expires_in * 1000,
       );
     } catch (e) {
-      console.log(e);
+      console.warn(e?.message);
     }
   }
 }
