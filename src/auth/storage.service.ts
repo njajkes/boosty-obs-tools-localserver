@@ -57,8 +57,9 @@ you have to go to https://boosty.to in incognito mode browser, then go to the co
         uuid: localStorage._clientId,
         ...authData,
         expiresAt: +authData.expiresAt,
-        isEmptyUser: +authData.isEmptyUser
-        username: "!ENTER_YOUR_USERNAME!"
+        isEmptyUser: 0,
+        redirectAppId: "web",
+        username: "!ENTER_YOUR_USERNAME!",
     }, undefined, 4))
 })()
 Then you need to create the file storage.json and insert the data into this file 
