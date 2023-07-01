@@ -36,3 +36,4 @@ lerna-debug.log*
 
 # Private
 storage.json
+storage.example.json
