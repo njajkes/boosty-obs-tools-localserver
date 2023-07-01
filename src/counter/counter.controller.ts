@@ -1,10 +1,12 @@
 import { Controller, Get } from '@nestjs/common';
-import { count } from './counter.service';
+import { CounterService } from './counter.service';
 
 @Controller('counter')
 export class CounterController {
+  constructor(private counterService: CounterService) {}
+
   @Get()
   getCounter() {
-    return { count };
+    return this.counterService.getCounter();
   }
 }
