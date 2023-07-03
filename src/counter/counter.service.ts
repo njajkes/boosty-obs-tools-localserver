@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { AuthService } from 'src/auth/auth.service';
-import { StorageService } from 'src/auth/storage.service';
+import { StorageService } from 'src/storage/storage.service';
 
 class Counter {
   public current: number;
