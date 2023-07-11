@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { CounterService } from './counter.service';
 
-@Controller('counter')
+@Controller('api/counter')
 export class CounterController {
   constructor(private counterService: CounterService) {}
 

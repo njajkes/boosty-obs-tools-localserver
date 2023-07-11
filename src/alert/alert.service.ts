@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
+import axios from 'axios';
 import { AuthService } from 'src/auth/auth.service';
 import { StorageService } from 'src/storage/storage.service';
 
@@ -52,7 +54,9 @@ class Alerts {
   public sync(newAlerts: Alert[]) {
     const prevPairs = this.alerts.map(this.getPair);
     const newPairs = newAlerts
-      .filter((el) => el.onTime > this.lastTime)
+      .filter(
+        (el) => el.onTime > this.lastTime && el.level.currencyPrices.RUB > 0,
+      )
       .map(this.getPair);
 
     const pairsSet = new Set([...newPairs, ...prevPairs]);
@@ -68,9 +72,19 @@ class Alerts {
     );
 
     this.alerts = mergedAlerts;
-    this.lastTime = Math.max(this.lastTime, ...pairs.map((el) => el.onTime));
+    this.setLastTime(Math.max(this.lastTime, ...pairs.map((el) => el.onTime)));
 
     return this.alerts;
+  }
+
+  public setLastTime(t: number) {
+    if (!isNaN(t) && isFinite(t)) {
+      this.lastTime = t;
+    }
+  }
+
+  public getLastTime() {
+    return this.lastTime;
   }
 }
 
@@ -83,23 +97,31 @@ class AlertsSingleton {
   }
 }
 
-const LIMIT = 5;
-
 @Injectable()
 export class AlertService {
   constructor(
     private authService: AuthService,
     private storageService: StorageService,
-  ) {}
+    private configService: ConfigService,
+  ) {
+    if (configService.get('FROM_NOW')) {
+      this.init();
+    }
+  }
 
-  @Cron('*/6 * * * * *')
+  async init() {
+    const initialSubs = await this.getNewSubs();
+    const maxTime = Math.max(0, ...initialSubs.data.map((el) => el.onTime));
+    AlertsSingleton.getInstance().setLastTime(maxTime);
+  }
+
+  @Cron('*/30 * * * * *')
   async updateAlerts() {
     const instance = AlertsSingleton.getInstance();
 
     try {
       const { data } = await this.getNewSubs();
       instance.sync(data);
-      console.log(instance);
     } catch (e) {
       console.warn(e?.message);
     }
@@ -107,20 +129,40 @@ export class AlertService {
 
   private async getNewSubs() {
     const storage = this.storageService.getStorage();
+    const limit = this.configService.get('ALERT_LIMIT') || 30;
 
-    const res = await fetch(
-      `https://api.boosty.to/v1/blog/${storage.username}/subscribers?sort_by=on_time&limit=${LIMIT}&order=gt`,
+    const res = await axios.get<{ data: Alert[] }>(
+      `https://api.boosty.to/v1/blog/${storage.username}/subscribers?sort_by=on_time&limit=${limit}&order=gt`,
       {
         headers: await this.authService.getHeaders(),
+        timeout: 10000,
+        timeoutErrorMessage: 'tayma4 poymal',
       },
     );
 
-    if (!res.ok) {
-      throw new Error(`Failed to get subs: ${res.status}`);
-    }
+    const data = res.data;
 
-    const data = (await res.json()) as { data: Alert[] };
     return data;
+  }
+
+  public debugSub() {
+    const instance = AlertsSingleton.getInstance();
+    instance.sync([
+      {
+        id: Date.now() + Math.random(),
+        displayName: 'Test',
+        level: {
+          currencyPrices: { RUB: 1984, USD: 322 },
+          id: Date.now() + Math.random(),
+          name: 'Testoviy',
+        },
+        name: 'test',
+        nick: 'xXx_test_xXx',
+        onTime: instance.getLastTime() + 500,
+        price: 1984,
+        subscribed: true,
+      },
+    ]);
   }
 
   public async getSub() {
